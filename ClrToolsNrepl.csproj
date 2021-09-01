@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <RootNamespace>ClrToolsNrepl</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Clojure" Version="1.10.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="src\clojure\cnrepl\cmdline.clj">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

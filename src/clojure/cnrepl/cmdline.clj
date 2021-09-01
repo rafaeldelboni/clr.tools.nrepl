@@ -402,8 +402,9 @@ Exit:      Control+D or (exit) or (quit)"
   [server options]
   (let [transport (:transport options)
         port (:port server)
-        ^System.Net.Sockets.Socket ssocket (:server-socket server)                                         ;;; ^java.net.ServerSocket
-        host (.HostName (.GetHostEntry (.Address ^System.Net.IPEndPoint (.GetLocalEndpoint ssocket))))]      ;;; (.getHostName (.getInetAddress ssocket)
+        ^System.Net.Sockets.Socket ssocket (:server-socket server)  ;;; ^java.net.ServerSocket
+        ^System.Net.IPEndPoint endpoint (.LocalEndPoint ssocket)
+        host (.ToString (.Address endpoint))]       ;;; (.getHostName (.getInetAddress ssocket)
     ;; The format here is important, as some tools (e.g. CIDER) parse the string
     ;; to extract from it the host and the port to connect to
     (format "nREPL server started on port %d on host %s - %s://%s:%d"
@@ -449,7 +450,7 @@ Exit:      Control+D or (exit) or (quit)"
                   (interactive-repl server options)
                   ;; need to hold process open with a non-daemon thread
                   ;;   -- this should end up being super-temporary
-                  (System.Threading.Thread/Sleep Int64/MaxValue)))))         ;;; Thread/sleep   Long/MAX_VALUE
+                  (System.Threading.Thread/Sleep Int32/MaxValue)))))         ;;; Thread/sleep   Long/MAX_VALUE
 
 (defn -main
   [& args]
