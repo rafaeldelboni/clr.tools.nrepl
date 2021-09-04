@@ -9,7 +9,8 @@
 (ns cnrepl.bencode
   "A netstring and bencode implementation for Clojure."
   {:author "Meikel Brandmeyer"}
-  (:require [clojure.clr.io :as io])                   ;;; clojure.java.io
+  (:require [clojure.clr.io :as io]
+            [cnrepl.debug :as debug])                   ;;; clojure.java.io
   (:import clojure.lang.RT
            [System.IO Stream                           ;;; java.io ByteArrayOutputStream
             EndOfStreamException                       ;;; EOFException
@@ -237,7 +238,9 @@
 
 (defn #^{:private true} read-token
   [#^PushbackInputStream input]
+  (debug/prn-thread "--------------->1.1:read-token1")
   (let [ch (read-byte input)]
+    (debug/prn-thread "--------------->1.1:read-token2")
     (cond
       (= (long e) ch) nil
       (= i ch) :integer
@@ -255,6 +258,7 @@
 (defn read-bencode
   "Read bencode token from the input stream."
   [input]
+  (debug/prn-thread "--------------->1.1:read-bencode" input)
   (let [token (read-token input)]
     (case token
       :integer (read-integer input)

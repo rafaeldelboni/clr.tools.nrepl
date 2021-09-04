@@ -8,6 +8,7 @@
    [clojure.edn :as edn]
    [cnrepl.misc :refer [uuid]]
    [cnrepl.sync-channel :as sc]                                                      ;;; DM: Added this 
+   [cnrepl.debug :as debug]
    cnrepl.version)
   (:import
    clojure.lang.RT
@@ -28,7 +29,7 @@
 (deftype FnTransport [recv-fn send-fn close]
   Transport
   (send [this msg] (send-fn msg) this)
-  (recv [this] (.recv this Int64/MaxValue))                                         ;;; Long/MAX_VALUE
+  (recv [this] (.recv this Int32/MaxValue))                                         ;;; Long/MAX_VALUE
   (recv [this timeout] (recv-fn timeout))
   System.IDisposable                                                                ;;; java.io.Closeable
   (Dispose [this] (close)))                                                         ;;; (close [this] (close)))  TODO: This violates good IDisposable practice
@@ -44,6 +45,8 @@
                               (sc/put read-queue (transport-read)))                 ;;; .put
                             (catch Exception t                                      ;;; Throwable
                               (sc/put read-queue t))))]                             ;;; .put
+
+     (debug/prn-thread "->handling transport implementation " read-queue msg-pump) ;DEBUG
      (FnTransport.
       (let [failure (atom nil)]
         #(if @failure
@@ -53,7 +56,7 @@
                (do (reset! failure msg) (throw msg))
                msg))))
       write
-      (fn [] (close) (future-cancel msg-pump))))))
+      (fn [] (close) (.cancel msg-pump false) )))))
 
 (defmulti #^{:private true} <bytes class)
 
@@ -64,8 +67,12 @@
 (def #^{:private true} utf8 (System.Text.UTF8Encoding.))                   ;;; DM:Added
 
 (defmethod <bytes |System.Byte[]|                                          ;;; (RT/classForName "[B")
-  [#^|System.Byte[]| input]                                                ;;; #^"[B"
-  (.GetString utf8 input))                                                 ;;; (String. input "UTF-8"))
+  [input]                                                                  ;;; #^"[B"
+  (try
+    (.GetString utf8 input)
+    (catch Exception ex
+      (debug/prn-thread "---------------><bytes ERROR")
+      (throw ex))))                                                 ;;; (String. input "UTF-8"))
 
 (defmethod <bytes clojure.lang.IPersistentVector
   [input]
@@ -114,12 +121,19 @@
    (let [in (PushbackInputStream. (io/input-stream in))
          out (io/output-stream out)]
      (fn-transport
-      #(let [payload (rethrow-on-disconnection s (bencode/read-bencode in))
-             unencoded (<bytes (payload "-unencoded"))
-             to-decode (apply dissoc payload "-unencoded" unencoded)]
-         (walk/keywordize-keys (merge (dissoc payload "-unencoded")
-                                      (when unencoded {"-unencoded" unencoded})
-                                      (<bytes to-decode))))
+       #(let [_ (debug/prn-thread "--------------->1")
+              payload (rethrow-on-disconnection s (bencode/read-bencode in))
+              _ (debug/prn-thread "--------------->2")
+              unencoded (<bytes (payload "-unencoded"))
+              _ (debug/prn-thread "--------------->3")
+              to-decode (apply dissoc payload "-unencoded" unencoded)
+              _ (debug/prn-thread "--------------->4")]
+          (try 
+            (walk/keywordize-keys (merge (dissoc payload "-unencoded")
+                                         (when unencoded {"-unencoded" unencoded})
+                                         (<bytes to-decode)))
+          (catch Exception ex
+            (debug/prn-thread "---------------><bytes ERROR" ex))))
       #(rethrow-on-disconnection s
                                  (locking out
                                    (doto out

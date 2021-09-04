@@ -11,6 +11,7 @@
    cnrepl.middleware.lookup
    cnrepl.middleware.session
    cnrepl.middleware.sideloader
+   [cnrepl.debug :as debug]
    [cnrepl.misc :refer [log response-for returning]]
    [cnrepl.transport :as t])
   (:import
@@ -21,9 +22,10 @@
 (defn handle*
   [msg handler transport]
   (try
-    #_(debug/prn-thread "handle* " msg ", transport " (.GetHashCode transport))    ;DEBUG  
+    (debug/prn-thread "handle* " msg ", transport " (.GetHashCode transport))    ;DEBUG  
     (handler (assoc msg :transport transport))
     (catch Exception t                                                             ;;; Throwable
+      (debug/prn-thread "handle* error: " t)
       (log t "Unhandled REPL handler exception processing message" msg))))
 
 (defn- normalize-msg
@@ -38,15 +40,16 @@
   "Handles requests received via [transport] using [handler].
    Returns nil when [recv] returns nil for the given transport."
   [handler transport]
+  (debug/prn-thread "handle posting future for 1 " handler transport) ;DEBUG
   (when-let [msg (normalize-msg (t/recv transport))]
-    #_(debug/prn-thread "handle posting future for " msg) ;DEBUG
+    (debug/prn-thread "handle posting future for " msg) ;DEBUG
     (future (handle* msg handler transport))
     (recur handler transport)))
 
 (defn- safe-close
   [^IDisposable x]                                                                    ;;; ^java.io.Closeable
   (try
-    #_(debug/prn-thread "safe-close: Disposing a " (class x) " " (.GetHashCode x))
+    (debug/prn-thread "safe-close: Disposing a " (class x) " " (.GetHashCode x))
     (.Dispose x)                                                                      ;;; .close
     (catch Exception e                                                                ;;; java.io.IOException
       (log e "Failed to close " x))))
@@ -56,16 +59,21 @@
     :as server}]
   (when (.IsBound server-socket)                                                      ;;; when-not (.isClosed server-socket)
     (let [sock (.Accept server-socket)]                                               ;;; .accept
-	  #_(debug/prn-thread "Accepting connection")  ;DEBUG
+	  (debug/prn-thread "Accepting connection")  ;DEBUG
       (future (let [transport (transport sock)]
-				#_(debug/prn-thread "accept-connection: created transport " (.GetHashCode transport))  ;DEBUG
+				(debug/prn-thread "accept-connection: created transport " (.GetHashCode transport))  ;DEBUG
                 (try
+                  (debug/prn-thread "accept-connection: swap! " (.GetHashCode transport))  ;DEBUG
                   (swap! open-transports conj transport)
+                  (debug/prn-thread "accept-connection: greeting " (.GetHashCode transport))  ;DEBUG
                   (when greeting (greeting transport))
+                  (debug/prn-thread "accept-connection: handler " (.GetHashCode transport))  ;DEBUG
                   (handle handler transport)
+                  (catch Exception ex
+                    (debug/prn-thread "accept-connection: error " ex (.GetHashCode transport)))
                   (finally
                     (swap! open-transports disj transport)
-					#_(debug/prn-thread "accept-connection: closing transport " (.GetHashCode transport))  ;DEBUG
+                    (debug/prn-thread "accept-connection: closing transport " (.GetHashCode transport))  ;DEBUG
                     (safe-close transport)))))
       (future (accept-connection server)))))
 
@@ -73,7 +81,7 @@
   "Stops a server started via `start-server`."
   [{:keys [open-transports ^Socket server-socket] :as server}]                        ;;; ^ServerSocket
   (returning server
-             #_(debug/prn-thread "Stoping server " (:port server))                    ;DEBUG 
+             (debug/prn-thread "Stoping server " (:port server))                    ;DEBUG 
             (when (.Connected server-socket)                                          ;;; DM: ADDED
 	          (.Shutdown server-socket SocketShutdown/Both))                          ;;; DM: ADDED
             (.Close server-socket)                                                    ;;; .close
@@ -137,8 +145,12 @@
                         :state       state
                         :middleware (concat default-middleware additional-middleware)}))
     (fn [msg]
-      (binding [dynamic-loader/*state* state]
-        ((:handler @state) msg)))))
+      (try
+        (binding [dynamic-loader/*state* state]
+          ((:handler @state) msg))
+        (catch Exception ex
+          (debug/prn-thread "default-handler: exception" ex)
+          (throw ex))))))
 
 (defrecord Server [server-socket port open-transports transport greeting handler]
   IDisposable                                                                                      ;;; java.io.Closeable
@@ -186,7 +198,7 @@
                         transport-fn
                         greeting-fn
                         (or handler (default-handler)))]
-	#_(debug/prn-thread "Starting server " server) ;DEBUG
+	(debug/prn-thread "Starting server " server) ;DEBUG
     (.Listen ss 0)                                                                               ;;; DM: ADDED
     (future (accept-connection server))
     (when ack-port

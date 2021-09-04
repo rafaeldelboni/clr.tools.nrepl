@@ -6,6 +6,7 @@
    [cnrepl.middleware :refer [set-descriptor!]]
    [cnrepl.middleware.interruptible-eval :refer [*msg* evaluate]]
    [cnrepl.misc :refer [uuid response-for]]
+   [cnrepl.debug :as debug]
    [cnrepl.transport :as t])
   (:import
    (clojure.lang Compiler+CompilerException LineNumberingTextReader)               ;;; Compiler$CompilerException LineNumberingPushbackReader
@@ -97,11 +98,11 @@
   * thunk, a Runnable, the task itself,
    * ack, another Runnable, ran to notify of successful execution of thunk.
    The thunk/ack split is meaningful for interruptible eval: only the thunk can be interrupted."
-  [id ^ThreadStart thunk ^ThreadStart ack]
-  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.Invoke thunk) (.Invoke ack)))]
+  [id thunk ack]
+  (debug/prn-thread "default-exec: start " id thunk ack)
+  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (thunk) (ack)))]
     (System.Threading.ThreadPool/QueueUserWorkItem wc)))
-  
-  
+
 (defn- session-in
   "Returns a LineNumberingPushbackReader suitable for binding to *in*.
    When something attempts to read from it, it will (if empty) send a

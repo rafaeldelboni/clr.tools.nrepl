@@ -7,6 +7,7 @@ using clojure.clr.api;
 RT.LoadSpecCode();
 
 var load = Clojure.var("clojure.core", "load");
+load.invoke("/src/clojure/cnrepl/debug");
 load.invoke("/src/clojure/cnrepl/misc");
 load.invoke("/src/clojure/cnrepl/bencode");
 load.invoke("/src/clojure/cnrepl/sync_channel");
@@ -15,7 +16,6 @@ load.invoke("/src/clojure/cnrepl/transport");
 load.invoke("/src/clojure/cnrepl/core");
 load.invoke("/src/clojure/cnrepl/config");
 load.invoke("/src/clojure/cnrepl/ack");
-load.invoke("/src/clojure/cnrepl/debug");
 load.invoke("/src/clojure/cnrepl/util/completion");
 load.invoke("/src/clojure/cnrepl/util/lookup");
 load.invoke("/src/clojure/cnrepl/util/print");
