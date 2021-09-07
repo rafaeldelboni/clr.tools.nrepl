@@ -103,15 +103,18 @@
 
 (defn ^{:private true} safe-write-bencode
   "Similar to `bencode/write-bencode`, except it will only writes to the output
-   stream if the whole `thing` is writable. In practice, it avoids sending partial
-    messages down the transport, which is almost always bad news for the client.
+  stream if the whole `thing` is writable. In practice, it avoids sending partial
+  messages down the transport, which is almost always bad news for the client.
 
-   This will still throw an exception if called with something unencodable."
+  This will still throw an exception if called with something unencodable."
   [output thing]
   (let [buffer (MemoryStream.)]                                           ;;; ByteArrayOutputStream
     (try
-      (bencode/write-bencode buffer thing))
-    (.Write ^Stream output (.ToArray buffer))))                 ;;; .write .toByteArray  ^OutputStream
+      (bencode/write-bencode buffer thing)
+      (let [array-buffer (.ToArray buffer)]
+        (.Write output array-buffer 0 (.Length array-buffer)))
+      (catch Exception ex
+        (debug/prn-thread "safe-write-bencode:error" ex)))))                 ;;; .write .toByteArray  ^OutputStream
 
 (defn bencode
   "Returns a Transport implementation that serializes messages
