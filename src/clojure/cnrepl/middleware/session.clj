@@ -100,6 +100,7 @@
    The thunk/ack split is meaningful for interruptible eval: only the thunk can be interrupted."
   [id thunk ack]
   (debug/prn-thread "default-exec: start " id thunk ack)
+  ;(let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.Invoke ^ThreadStart thunk) (.Invoke ^ThreadStart ack)))]
   (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (thunk) (ack)))]
     (System.Threading.ThreadPool/QueueUserWorkItem wc)))
 
@@ -222,12 +223,13 @@
         queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|.)   ;;; LinkedBlockedQueue
         running (atom nil)
         thread (atom nil)
+        ;TODO:DELS System.InvalidCastException: Unable to cast object of type 'cnrepl.middleware.interruptible_eval$interruptible_evalfn__28111fn__28118__28122' to type 'System.Threading.WaitCallback'.
         main-loop #(try
                      (loop []
-                       (let [[exec-id ystem.Threading.WaitCallback r ystem.Threading.WaitCallback ack] (.take queue)]        ;;; ^Runnable ^Runnable
+                       (let [[exec-id runable ack] (.Take queue)]        ;;; ^Runnable ^Runnable
                          (reset! running exec-id)
                          (when (try
-                                 (System.Threading.ThreadPool/QueueUserWorkItem r)                                           ;;; (.run r)
+                                 (System.Threading.ThreadPool/QueueUserWorkItem runable)                                           ;;; (.run r)
                                  (compare-and-set! running exec-id nil)
                                  (finally
                                    (compare-and-set! running exec-id nil)))
@@ -254,8 +256,8 @@
                         (reset! thread (spawn-thread))
                         current))))
      :close #(interrupt-stop @thread)
-     :exec (fn [exec-id r ack]
-             (.Add queue [exec-id r ack]))}))                                                                              ;;; .put
+     :exec (fn [exec-id runable ack]
+             (.Add queue [exec-id runable ack]))}))                                                                              ;;; .put
 
 (defn- register-session
   "Registers a new session containing the baseline bindings contained in the
