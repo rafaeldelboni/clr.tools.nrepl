@@ -8,7 +8,6 @@
    [clojure.edn :as edn]
    [cnrepl.misc :refer [uuid]]
    [cnrepl.sync-channel :as sc]                                                      ;;; DM: Added this 
-   [cnrepl.debug :as debug]
    cnrepl.version)
   (:import
    clojure.lang.RT
@@ -45,8 +44,6 @@
                               (sc/put read-queue (transport-read)))                 ;;; .put
                             (catch Exception t                                      ;;; Throwable
                               (sc/put read-queue t))))]                             ;;; .put
-
-     (debug/prn-thread "->handling transport implementation " read-queue msg-pump) ;DEBUG
      (FnTransport.
       (let [failure (atom nil)]
         #(if @failure
@@ -67,12 +64,8 @@
 (def #^{:private true} utf8 (System.Text.UTF8Encoding.))                   ;;; DM:Added
 
 (defmethod <bytes |System.Byte[]|                                          ;;; (RT/classForName "[B")
-  [input]                                                                  ;;; #^"[B"
-  (try
-    (.GetString utf8 input)
-    (catch Exception ex
-      (debug/prn-thread "---------------><bytes ERROR")
-      (throw ex))))                                                 ;;; (String. input "UTF-8"))
+  [#^|System.Byte[]| input]                                                ;;; #^"[B"
+  (.GetString utf8 input))                                                 ;;; (String. input "UTF-8"))
 
 (defmethod <bytes clojure.lang.IPersistentVector
   [input]
@@ -112,9 +105,7 @@
     (try
       (bencode/write-bencode buffer thing)
       (let [array-buffer (.ToArray buffer)]
-        (.Write output array-buffer 0 (.Length array-buffer)))
-      (catch Exception ex
-        (debug/prn-thread "safe-write-bencode:error" ex)))))                 ;;; .write .toByteArray  ^OutputStream
+        (.Write output array-buffer 0 (.Length array-buffer))))))                 ;;; .write .toByteArray  ^OutputStream
 
 (defn bencode
   "Returns a Transport implementation that serializes messages
@@ -124,19 +115,12 @@
    (let [in (PushbackInputStream. (io/input-stream in))
          out (io/output-stream out)]
      (fn-transport
-       #(let [_ (debug/prn-thread "--------------->1")
-              payload (rethrow-on-disconnection s (bencode/read-bencode in))
-              _ (debug/prn-thread "--------------->2")
-              unencoded (<bytes (payload "-unencoded"))
-              _ (debug/prn-thread "--------------->3")
-              to-decode (apply dissoc payload "-unencoded" unencoded)
-              _ (debug/prn-thread "--------------->4")]
-          (try 
-            (walk/keywordize-keys (merge (dissoc payload "-unencoded")
-                                         (when unencoded {"-unencoded" unencoded})
-                                         (<bytes to-decode)))
-          (catch Exception ex
-            (debug/prn-thread "---------------><bytes ERROR" ex))))
+      #(let [payload (rethrow-on-disconnection s (bencode/read-bencode in))
+             unencoded (<bytes (payload "-unencoded"))
+             to-decode (apply dissoc payload "-unencoded" unencoded)]
+         (walk/keywordize-keys (merge (dissoc payload "-unencoded")
+                                      (when unencoded {"-unencoded" unencoded})
+                                      (<bytes to-decode))))
       #(rethrow-on-disconnection s
                                  (locking out
                                    (doto out
