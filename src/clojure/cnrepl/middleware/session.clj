@@ -100,8 +100,9 @@
    The thunk/ack split is meaningful for interruptible eval: only the thunk can be interrupted."
   [id thunk ack]
   (debug/prn-thread "default-exec: start " id thunk ack)
-  ;(let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.Invoke ^ThreadStart thunk) (.Invoke ^ThreadStart ack)))]
-  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (thunk) (ack)))]
+  (let [thunk-thread (gen-delegate ThreadStart [] thunk)
+        ack-thread (gen-delegate ThreadStart [] ack)
+        wc (gen-delegate System.Threading.WaitCallback [_] (do (.Invoke thunk-thread) (.Invoke ack-thread)))]
     (System.Threading.ThreadPool/QueueUserWorkItem wc)))
 
 (defn- session-in
@@ -223,17 +224,24 @@
         queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|.)   ;;; LinkedBlockedQueue
         running (atom nil)
         thread (atom nil)
-        ;TODO:DELS System.InvalidCastException: Unable to cast object of type 'cnrepl.middleware.interruptible_eval$interruptible_evalfn__28111fn__28118__28122' to type 'System.Threading.WaitCallback'.
         main-loop #(try
+                     (debug/prn-thread "--------------->pre:pre-let")
                      (loop []
-                       (let [[exec-id runable ack] (.Take queue)]        ;;; ^Runnable ^Runnable
+                       (debug/prn-thread "--------------->pre:let")
+                       (let [[exec-id runable ack] (.Take queue)
+                             wc-runnable (gen-delegate System.Threading.WaitCallback [_] runable)
+                             wc-ack (gen-delegate System.Threading.WaitCallback [_] ack)]
+                         (debug/prn-thread "--------------->pre:reset!")
                          (reset! running exec-id)
                          (when (try
-                                 (System.Threading.ThreadPool/QueueUserWorkItem runable)                                           ;;; (.run r)
+                                 (debug/prn-thread "--------------->pre:QueueUserWorkItem")
+                                 (System.Threading.ThreadPool/QueueUserWorkItem wc-runnable)                                           ;;; (.run r)
                                  (compare-and-set! running exec-id nil)
+                                 (catch Exception ex
+                                   (debug/prn-thread "session-exec: Error" ex))
                                  (finally
                                    (compare-and-set! running exec-id nil)))
-                           (some-> ack System.Threading.ThreadPool/QueueUserWorkItem)                                        ;;; .run
+                           (some-> wc-ack System.Threading.ThreadPool/QueueUserWorkItem)                                        ;;; .run
                            (recur))))
                      (catch ThreadInterruptedException e))
         spawn-thread #(doto (Thread. (gen-delegate ThreadStart [] (main-loop)))                        ;;; (Thread. main-loop (str "nREPL-session-" id))
